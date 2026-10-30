@@ -1,0 +1,21 @@
+{
+  "menu": ["로켓그로스", "재고현황"],
+  "inventory_url": null,
+  "prepare": [],
+  "ready_selector": null,
+  "export_selector": null,
+  "collection": "download",
+  "table_selector": null,
+  "next_selector": null,
+  "single_page": false,
+  "max_pages": 500,
+  "scope": null,
+  "sheet": null,
+  "columns": {},
+  "login": {
+    "username_selector": null,
+    "password_selector": null,
+    "submit_selector": null,
+    "authenticated_selector": null
+  }
+}

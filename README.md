@@ -1,1 +1,126 @@
+# 쿠팡 WING 로켓그로스 재고 계산기
 
+고객님 PC에서 WING을 열고 **로켓그로스 → 재고현황**의 상품·옵션별 재고와 최근 7일 판매수량을 수집하여, **6주 필요 재고와 추가 확보수량**을 엑셀로 만듭니다.
+
+> 검증 범위: 계산·엑셀 처리 및 모의 화면을 사용하는 실제 Chromium 테스트. 실제 판매자 계정에는 접속하지 않았으므로 화면 선택자와 실제 보고서 열 제목을 최초 실행 때 맞춰야 합니다. 기본은 로그인·인증·다운로드를 직접 완료하는 안내 모드이며, 화면 설정 후 자동 로그인·수집 모드를 사용할 수 있습니다. WING 내부 주소와 선택자를 추정해 넣지 않았습니다.
+
+## Windows에서 시작
+
+1. [Python](https://www.python.org/downloads/) **3.10 이상**을 설치합니다. 설치 프로그램에서 `py` 실행기 설치를 선택합니다.
+2. 프로그램을 압축 해제하고 **`setup_windows.bat`**를 실행합니다. 최초 한 번 패키지와 Chromium을 설치합니다.
+3. **`run_windows.bat`**를 실행합니다. 열린 브라우저에서 본인이 로그인·추가 인증을 완료하고 터미널 안내에 따라 Enter를 누릅니다.
+4. 자동 메뉴 이동이 실패하면 직접 `로켓그로스 → 재고현황`으로 이동합니다. **전체 상품·옵션**, **최근 7일 판매수량**, **판매가능 재고**가 선택되었는지 확인합니다.
+5. 터미널에 조회 범위·집계 기준을 기록합니다. 예: `전체 상품, WING 최근 7일, 판매가능 재고 기준`.
+6. 브라우저에서 **전체 상품의 엑셀 다운로드**를 클릭하고 터미널에서 Enter를 누릅니다. 결과는 `output` 폴더에 저장됩니다.
+
+다운로드 파일에 최근 7일 판매수량이 없으면 계산을 중단합니다. 해당 열이 포함된 내보내기를 선택하거나 아래 화면 표 수집 모드를 설정하세요. 리포트 생성·확인창이 있다면 안내 모드에서 직접 완료할 수 있습니다.
+
+## macOS / Linux 또는 직접 실행
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+python -m playwright install chromium
+wing-stock
+```
+
+Windows PowerShell에서는 `.venv\Scripts\Activate.ps1`로 활성화합니다. Linux에서 시스템 라이브러리가 부족하면 공식 절차인 `python -m playwright install --with-deps chromium`을 따르세요. 브라우저 창이 표시되는 데스크톱 환경이 필요합니다.
+
+## 계산과 결과
+
+| 항목 | 계산 |
+| --- | --- |
+| 6주 필요재고 | 최근 7일 판매수량 × 6 |
+| 추가 확보수량 | max(6주 필요재고 − 판매가능 재고, 0) |
+| 일평균 판매수량 | 최근 7일 판매수량 ÷ 7 |
+| 재고 소진 예상일수 | 재고 ÷ 일평균 판매수량; 판매 0건은 빈칸 |
+
+재고 20개, 최근 7일 판매 10개라면 6주 필요재고 60개, **추가 확보 40개**입니다.
+
+`재고보충계획` 시트는 상품명·옵션·ID·재고·판매수량·필요재고·추가 확보수량을 표시하고, 확보수량이 많은 순서로 정렬합니다. `요약·계산기준` 시트는 합계, 원본 파일, 생성시각(한국), 조회 범위, 사용한 열 이름을 기록합니다. 결과는 값으로 저장하므로 재고가 바뀌면 다시 실행하세요.
+
+**최근 7일은 WING 원본 지표의 집계 기준입니다.** 오늘 포함 여부·원본 갱신시각·취소/반품 반영 기준은 WING에서 확인하세요. 매출액·주문건수·최근 30일 판매량을 대체 지표로 쓰지 마세요. 총재고 대신 **판매가능 재고**를 사용합니다. 입고예정·안전재고·공급 리드타임·발주 단위·계절성은 미반영입니다. 품절 기간에는 판매량이 실제 수요보다 작을 수 있습니다.
+
+옵션ID/SKU처럼 옵션별로 고유한 ID가 필요합니다. 같은 ID의 여러 행은 창고별 분할이나 중복일 수 있어 임의로 합산하지 않고 중단합니다. 누락된 수량을 0으로 간주하지 않습니다.
+
+## 실제 화면 설정 후 자동화
+
+`config.example.json`을 **`config.local.json`**으로 복사합니다. 설정 파일에는 비밀번호·쿠키·인증 토큰이 포함된 URL을 넣지 마세요.
+
+- `inventory_url`: 로그인 후 재고현황의 일반 페이지 주소. 생략하면 `menu`의 메뉴 이름을 클릭합니다. WING 내부 HTTPS 주소만 허용합니다.
+- `ready_selector`: 재고 화면이 준비되었음을 확인할 실제 요소.
+- `export_selector`: **전체 상품** 엑셀을 다운로드하는 실제 버튼. CSS 문자열 또는 `{"role": "button", "name": "실제 버튼 이름"}` 형식. 별도 다운로드 확인창이 있다면 안내 모드를 사용하세요.
+- `scope`: 필터·조회 범위와 최근 7일 집계 기준. 실제 필터와 일치시켜야 합니다.
+- `prepare`: 필요하면 조회용 필터 작업을 순서대로 설정합니다. `{"action":"click","selector":"실제 CSS"}`, `{"action":"select","selector":"실제 CSS","label":"최근 7일"}`, `fill`의 `value`, `wait`를 지원합니다. **상품·재고 수정 버튼을 넣지 마세요.**
+- `sheet`: 여러 시트가 있다면 실제 데이터 시트 이름.
+- `columns`: 자동 인식되지 않는 원본 열 제목을 지정합니다. `sku`, `name`, `stock`, `sales7`이 필수이고 `option`은 선택입니다.
+
+`columns`에 넣는 예시(실제 파일과 제목이 같은 경우):
+
+```json
+{
+  "sku": "옵션ID",
+  "name": "상품명",
+  "option": "옵션명",
+  "stock": "판매가능 재고",
+  "sales7": "최근 7일 판매수량"
+}
+```
+
+선택자는 브라우저 개발자 도구 또는 `python -m playwright codegen https://wing.coupang.com/`의 요소 선택 기능으로 확인할 수 있습니다. 로그인 녹화 시 비밀번호가 코드에 포함될 수 있으므로 로그인 후 조회 요소만 선택하고 녹화 코드를 공유하지 마세요. 모달·iframe·새 창 등 지원하지 않는 구조는 별도 연동 조정이 필요할 수 있습니다.
+
+### 로그인 자동화
+
+전용 로컬 브라우저 프로필로 로그인 세션을 재사용합니다. `login.authenticated_selector`에는 **로그인 후 첫 화면에서만 보이는 요소**를 지정합니다.
+
+아이디·비밀번호 입력도 자동화하려면 실제 로그인 화면에 맞게 `login.username_selector`, `password_selector`, `submit_selector`, `authenticated_selector` 4개를 지정합니다.
+
+```bash
+# 아이디는 터미널 입력, 비밀번호는 숨김 입력 (저장 안 함)
+wing-stock --config config.local.json --auto-login
+
+# 유효한 로그인 세션과 화면 설정을 확인한 뒤 무인 수집
+wing-stock --config config.local.json --automatic
+```
+
+무인 모드는 `scope`, `ready_selector`, `export_selector`(다운로드 모드), `login.authenticated_selector`를 실제 화면에 맞게 설정해야 합니다. `--automatic --auto-login`은 PC의 `WING_USERNAME`, `WING_PASSWORD` 환경변수를 사용합니다. 값을 코드·설정 파일·명령행 인수에 적지 마세요. 추가 인증·캡차·세션 만료는 우회하지 않으며 일반 모드로 직접 완료해야 합니다. 기본 프로그램은 상품·재고 변경을 요청하지 않습니다.
+
+### 엑셀에 판매량이 없을 때: 화면 표 수집
+
+`collection`을 `table`로 바꾸고 실제 HTML 표의 `table_selector`와 다음 페이지 버튼의 `next_selector`를 지정하세요. 최근 7일 판매량과 판매가능 재고가 각각 별도 열이어야 합니다.
+
+- 다음 버튼이 `disabled` 또는 `aria-disabled="true"`가 될 때까지 수집합니다.
+- 정말 한 페이지만 있는 경우에만 `single_page: true`를 설정하고 `next_selector`를 생략하세요.
+- `max_pages` 기본값은 500입니다. 한도 도달·페이지 반복·표 구조 변경 시 일부 데이터로 계산하지 않고 중단합니다.
+- 단일 헤더 행의 HTML `table/thead/tbody/tr/td` 구조를 지원합니다. 가상 스크롤·카드·다중 헤더는 엑셀 다운로드를 사용하거나 실제 화면에 맞는 추가 개발이 필요합니다.
+
+## 기존 보고서·샘플로 계산
+
+UTF-8/CP949 CSV와 XLSX를 지원합니다. XLS·암호화된 파일은 XLSX로 다시 저장하세요. 수식 기반 XLSX라면 값이 저장된 보고서가 필요합니다.
+
+```bash
+wing-stock --input examples/inventory.csv --scope "샘플 4개 옵션, 최근 7일" --output output/sample.xlsx
+wing-stock --input "내재고.xlsx" --scope "전체 상품, WING 최근 7일" --config config.local.json --sheet "재고현황"
+```
+
+샘플은 추가 확보 **총 58개**(수건 40개, 컵 18개)입니다. **실제 고객님의 재고가 아닙니다.** 원본 파일과 기존 출력 파일은 덮어쓰지 않습니다.
+
+## 로컬 저장 정보
+
+- `.wing-stock/browser-profile/`: 쿠키를 포함하는 **민감한 전용 로그인 프로필**. Git 커밋·압축·업로드하지 마세요. 동시에 여러 프로세스로 실행하지 마세요.
+- `.wing-stock/downloads/`: 원본 재고·판매 보고서 또는 수집한 표.
+- `output/`: 계산 결과 엑셀.
+
+세션을 초기화하려면 프로그램 종료 후 `.wing-stock/browser-profile`을 삭제하세요. 공유 PC에서는 전용 OS 계정을 사용하고 계정 권한과 WING 이용 조건에 맞게 실행하세요.
+
+## 개발·검증
+
+```bash
+python -m pip install pytest==8.4.2
+python -m pytest -q
+# 설치된 Chromium으로 실제 브라우저 테스트 포함 (Linux 예시)
+WING_TEST_CHROMIUM=/usr/bin/chromium python -m pytest -q
+```
+
+브라우저 테스트는 가짜 로그인·메뉴·다운로드·페이지 나누기를 제공하는 모의 화면을 사용합니다. 실제 WING 계정 조회가 성공했다는 의미는 아닙니다. 화면 변경 시 설정과 원본 열 매핑을 재확인하세요.
