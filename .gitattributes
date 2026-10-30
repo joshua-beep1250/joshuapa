@@ -1,0 +1,2 @@
+# Preserve CRLF bytes in GitHub ZIP downloads, including the stored Git blobs.
+*.bat -text whitespace=cr-at-eol
