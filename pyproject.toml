@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "wing-stock"
-version = "0.1.0"
+version = "0.1.1"
 description = "쿠팡 WING 로켓그로스 재고 및 6주 보충량 계산"
 requires-python = ">=3.10"
 dependencies = ["openpyxl==3.1.5", "playwright==1.58.0"]

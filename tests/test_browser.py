@@ -1,9 +1,10 @@
 import os
 import base64
+from types import SimpleNamespace
 
 import pytest
 
-from wing_stock.browser import download_report, login, navigate_inventory, read_table, require_wing_url
+from wing_stock.browser import check_access, download_report, launch_context, login, navigate_inventory, read_table, require_wing_url
 from wing_stock.report import ReportError, parse_report
 
 
@@ -11,6 +12,36 @@ from wing_stock.report import ReportError, parse_report
 def test_reject_unrelated_start_urls(url):
     with pytest.raises(ReportError):
         require_wing_url(url)
+
+
+def test_installed_browser_selection_only_falls_back_if_missing(tmp_path):
+    from playwright.sync_api import Error
+    calls = []
+    sentinel = object()
+
+    def launch(profile, **options):
+        calls.append(options.get("channel"))
+        if options.get("channel") == "chrome":
+            raise Error("Chromium distribution 'chrome' is not found")
+        return sentinel
+
+    pw = SimpleNamespace(chromium=SimpleNamespace(launch_persistent_context=launch))
+    assert launch_context(pw, tmp_path) is sentinel
+    assert calls == ["chrome", "msedge"]
+
+
+def test_browser_start_error_is_not_retried(tmp_path):
+    from playwright.sync_api import Error
+    calls = []
+
+    def launch(profile, **options):
+        calls.append(options.get("channel"))
+        raise Error("Profile is already in use")
+
+    pw = SimpleNamespace(chromium=SimpleNamespace(launch_persistent_context=launch))
+    with pytest.raises(ReportError, match="다른 실행 창"):
+        launch_context(pw, tmp_path)
+    assert calls == ["chrome"]
 
 
 @pytest.mark.skipif(not os.environ.get("WING_TEST_CHROMIUM"), reason="Set WING_TEST_CHROMIUM for a local browser integration test")
@@ -65,4 +96,9 @@ def test_browser_navigation_login_and_download(tmp_path, monkeypatch):
             read_table(page, tmp_path, {"table_selector": "table", "next_selector": "#next", "max_pages": 1})
         with pytest.raises(ReportError, match="명시적 확인"):
             read_table(page, tmp_path, {"table_selector": "table"})
+        page.set_content("<html><title>Access Denied</title><h1>Access Denied</h1><p>You don't have permission to access this server.</p></html>")
+        with pytest.raises(ReportError, match="쿠팡 인증 서버"):
+            check_access(page)
+        with pytest.raises(ReportError, match="Access Denied"):
+            login(page, config, automatic=True, auto_login=True)
         browser.close()

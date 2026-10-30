@@ -117,3 +117,15 @@ def test_same_column_cannot_be_stock_and_sales(tmp_path):
     path = csv_file(tmp_path, "1,상품,옵션,10,2\n")
     with pytest.raises(ReportError, match="동일한 원본 열"):
         parse_report(path, {"sales7": "판매가능 재고"})
+
+
+def test_default_browser_manual_download_mode(tmp_path, monkeypatch):
+    opened = []
+    monkeypatch.setattr("webbrowser.open", lambda url, new: opened.append(url) or True)
+    source = Path(__file__).parents[1] / "examples" / "inventory.csv"
+    answers = iter([f'"{source}"', "전체 상품, 최근 7일 (테스트)"])
+    monkeypatch.setattr("builtins.input", lambda _: next(answers))
+    output = tmp_path / "manual.xlsx"
+    assert main(["--manual-download", "--output", str(output)]) == 0
+    assert output.is_file()
+    assert opened == ["https://wing.coupang.com/"]

@@ -6,7 +6,7 @@ set "PYTHONUTF8=1"
 set "PYTHONUNBUFFERED=1"
 if not exist "pyproject.toml" goto not_unpacked
 
-echo WING Stock Setup - Windows fix v2
+echo WING Stock Setup - Browser update v3
 echo.
 set "WING_PYTHON=py -3"
 %WING_PYTHON% -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" >nul 2>&1

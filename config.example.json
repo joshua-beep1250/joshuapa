@@ -1,4 +1,5 @@
 {
+  "browser": "auto",
   "menu": ["로켓그로스", "재고현황"],
   "inventory_url": null,
   "prepare": [],

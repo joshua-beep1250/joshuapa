@@ -14,6 +14,49 @@ from .report import KST, ReportError
 WING_URL = "https://wing.coupang.com/"
 
 
+def check_access(page):
+    denied = "access denied" in page.title().casefold()
+    for text in ("Access Denied", "You don't have permission to access"):
+        element = page.get_by_text(text, exact=text == "Access Denied")
+        if element.count() and element.first.is_visible():
+            denied = True
+    if denied:
+        raise ReportError(
+            "쿠팡 인증 서버가 접속을 거부했습니다 (Access Denied). "
+            "프로그램을 닫고 평소 쓰는 Chrome/Edge에서 WING 로그인이 되는지 확인하세요. "
+            "일반 브라우저에서도 거부되면 화면의 Reference 번호로 WING 고객센터에 문의하세요. "
+            "일반 브라우저에서만 된다면 run_manual_windows.bat로 엑셀을 직접 받아 계산할 수 있습니다. "
+            "반복 로그인이나 차단 우회는 시도하지 않습니다."
+        )
+
+
+def launch_context(pw, root, browser="auto"):
+    from playwright.sync_api import Error as BrowserError
+
+    if browser not in {"auto", "chrome", "msedge", "chromium"}:
+        raise ReportError("browser는 auto, chrome, msedge, chromium 중 하나여야 합니다.")
+    candidates = ["chrome", "msedge", "chromium"] if browser == "auto" else [browser]
+    for candidate in candidates:
+        profile = root / ("browser-profile" if candidate == "chromium" else f"browser-profile-{candidate}")
+        profile.mkdir(exist_ok=True)
+        profile.chmod(0o700)
+        options = {"headless": False, "accept_downloads": True, "locale": "ko-KR",
+                   "timezone_id": "Asia/Seoul", "viewport": {"width": 1440, "height": 1000}}
+        if candidate != "chromium":
+            options["channel"] = candidate
+        try:
+            context = pw.chromium.launch_persistent_context(str(profile), **options)
+            print(f"사용 브라우저: {candidate} (전용 프로필)")
+            return context
+        except BrowserError as error:
+            missing = any(term in str(error).casefold() for term in ("not found", "doesn't exist", "does not exist"))
+            # Only try another installed browser when the executable is missing.
+            # A login denial must never trigger retries with other browsers.
+            if browser != "auto" or not missing or candidate == candidates[-1]:
+                raise ReportError("브라우저를 시작하지 못했습니다. Chrome/Edge 설치와 다른 실행 창을 확인하세요. "
+                                  "또는 setup_windows.bat로 Chromium을 설치하세요.") from None
+
+
 def require_wing_url(url):
     parsed = urlparse(url)
     if parsed.scheme != "https" or parsed.hostname != "wing.coupang.com" or parsed.username or parsed.password:
@@ -33,6 +76,7 @@ def locator(page, spec):
 def login(page, config, automatic, auto_login):
     from playwright.sync_api import TimeoutError as BrowserTimeout
 
+    check_access(page)
     auth = config.get("login", {})
     marker = auth.get("authenticated_selector")
     if marker:
@@ -59,11 +103,13 @@ def login(page, config, automatic, auto_login):
             locator(page, marker).wait_for(state="visible", timeout=15000)
             return
         except BrowserTimeout:
+            check_access(page)
             if automatic:
                 raise ReportError("로그인 완료를 확인하지 못했습니다. 인증/캡차가 있다면 일반 모드로 직접 완료하세요.") from None
     if automatic:
         raise ReportError("유효한 로그인 세션을 확인하지 못했습니다. 먼저 일반 모드로 로그인하세요.")
     input("브라우저에서 WING 로그인과 추가 인증을 완료한 뒤 여기서 Enter를 누르세요: ")
+    check_access(page)
     if marker:
         locator(page, marker).wait_for(state="visible", timeout=15000)
 
@@ -202,27 +248,23 @@ def collect(config: dict, root: Path, automatic=False, auto_login=False):
         raise ReportError("무인 모드는 config의 scope(필터·7일 집계 기준), ready_selector가 필요합니다.")
     root.mkdir(parents=True, exist_ok=True)
     root.chmod(0o700)
-    profile = root / "browser-profile"
-    profile.mkdir(exist_ok=True)
-    profile.chmod(0o700)
     with sync_playwright() as pw:
         # Persist only a dedicated local profile, never the user's normal browser profile.
-        context = pw.chromium.launch_persistent_context(
-            str(profile), headless=False, accept_downloads=True,
-            locale="ko-KR", timezone_id="Asia/Seoul",
-            viewport={"width": 1440, "height": 1000},
-        )
+        context = launch_context(pw, root, config.get("browser", "auto"))
         try:
             page = context.pages[0] if context.pages else context.new_page()
             page.goto(WING_URL, wait_until="domcontentloaded")
+            check_access(page)
             login(page, config, automatic, auto_login)
             try:
                 navigate_inventory(page, config)
             except Exception:
+                check_access(page)
                 if automatic:
                     raise
                 print("자동 메뉴 이동을 확인하지 못했습니다.")
                 input("브라우저에서 로켓그로스 > 재고현황으로 이동한 뒤 Enter: ")
+            check_access(page)
             if urlparse(page.url).hostname != "wing.coupang.com":
                 raise ReportError("WING 내부 재고 페이지가 아닙니다. 로그인 상태를 확인하세요.")
             if automatic:

@@ -4,7 +4,7 @@ title WING Stock - Run
 cd /d "%~dp0"
 set "PYTHONUTF8=1"
 set "PYTHONUNBUFFERED=1"
-echo WING Stock - Windows fix v2
+echo WING Stock - Browser update v3
 echo.
 if not exist "pyproject.toml" goto not_unpacked
 if not exist ".venv\Scripts\python.exe" goto needs_setup
